@@ -54,3 +54,11 @@ class GameCreateSerializer(serializers.ModelSerializer):
         }
         from random import choice
         return choice(word_pool[difficulty])
+
+
+class AvailableGameSerializer(serializers.ModelSerializer):
+    player1 = serializers.StringRelatedField()  # Show Player One Username
+
+    class Meta:
+        model = Game
+        fields = ('id', 'player1', 'difficulty', 'created_at')

@@ -2,7 +2,7 @@
 from .models import Game
 from rest_framework import generics, permissions
 from django.contrib.auth.models import User
-from .serializers import RegisterSerializer, ProfileSerializer, GameCreateSerializer
+from .serializers import RegisterSerializer, ProfileSerializer, GameCreateSerializer, AvailableGameSerializer
 
 
 class RegisterView(generics.CreateAPIView):
@@ -21,3 +21,11 @@ class ProfileView(generics.RetrieveAPIView):
 class GameCreateView(generics.CreateAPIView):
     serializer_class = GameCreateSerializer
     permission_classes = [permissions.IsAuthenticated]
+
+
+class AvailableGamesView(generics.ListAPIView):
+    serializer_class = AvailableGameSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        return Game.objects.filter(player2__isnull=True, status='waiting')
