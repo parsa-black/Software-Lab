@@ -1,6 +1,7 @@
 # game/views.py
 from .models import Game
-from .serializers import RegisterSerializer, ProfileSerializer, GameCreateSerializer, AvailableGameSerializer
+from .serializers import (RegisterSerializer, ProfileSerializer, GameCreateSerializer, AvailableGameSerializer,
+                          GameStatusSerializer)
 from rest_framework import generics, permissions
 from rest_framework.response import Response
 from rest_framework import status, views
@@ -50,7 +51,13 @@ class JoinGameView(views.APIView):
             return Response({'detail': 'You Are Player One.'}, status=status.HTTP_400_BAD_REQUEST)
 
         game.player2 = request.user
-        game.status = 'in_progress'
+        game.status = 'active'
         game.save()
 
         return Response({'detail': 'Join Successful.'}, status=status.HTTP_200_OK)
+
+
+class GameStatusView(generics.RetrieveAPIView):
+    queryset = Game.objects.all()
+    serializer_class = GameStatusSerializer
+    permission_classes = [permissions.IsAuthenticated]

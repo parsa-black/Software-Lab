@@ -1,7 +1,8 @@
 # game/serializers.py
-from .models import Game
+from .models import Game, Guess
 from django.contrib.auth.models import User
 from rest_framework import serializers
+
 
 class RegisterSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True)
@@ -62,3 +63,30 @@ class AvailableGameSerializer(serializers.ModelSerializer):
     class Meta:
         model = Game
         fields = ('id', 'player1', 'difficulty', 'created_at')
+
+
+# Game Status
+class GameStatusSerializer(serializers.ModelSerializer):
+    player1 = serializers.CharField(source='player1.username', read_only=True)
+    player2 = serializers.CharField(source='player2.username', read_only=True)
+    current_turn = serializers.CharField(source='current_turn.username', read_only=True)
+    word_progress = serializers.SerializerMethodField()
+    remaining_time = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Game
+        fields = [
+            'id', 'player1', 'player2', 'difficulty', 'status',
+            'score_player1', 'score_player2', 'current_turn',
+            'word_progress', 'remaining_time', 'created_at'
+        ]
+
+    def get_word_progress(self, obj):
+        # Collect all guessed letters for this game
+        guessed_letters = obj.guesses.values_list('letter', flat=True)
+        # Replace un guessed letters with underscores
+        return ' '.join([letter if letter.lower() in guessed_letters else '_' for letter in obj.word])
+
+    def get_remaining_time(self, obj):
+        # Optional: Implement logic for countdown timer per difficulty if needed
+        return None
