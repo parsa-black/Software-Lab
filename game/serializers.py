@@ -44,7 +44,7 @@ class GameCreateSerializer(serializers.ModelSerializer):
         game = Game.objects.create(
             player1=user,
             word=word,
-            difficulty=v,
+            difficulty=difficulty,
             current_turn=user  # Start With Player One
         )
         return game
