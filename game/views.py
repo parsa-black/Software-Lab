@@ -1,4 +1,5 @@
 # game/views.py
+from django.db import models
 from .models import Game, Guess
 from .serializers import (RegisterSerializer, ProfileSerializer, GameCreateSerializer, AvailableGameSerializer,
                           GameStatusSerializer)
@@ -94,14 +95,14 @@ class GuessLetterView(APIView):
         # 5. Update score
         if is_correct:
             if user == game.player1:
-                game.score_player1 += 20
+                game.score_player1 += 70
             else:
-                game.score_player2 += 20
+                game.score_player2 += 70
         else:
             if user == game.player1:
-                game.score_player1 -= 20
+                game.score_player1 -= 10
             else:
-                game.score_player2 -= 20
+                game.score_player2 -= 10
 
         # 6. Save guess
         Guess.objects.create(game=game, player=user, letter=letter, is_correct=is_correct)
@@ -125,3 +126,20 @@ class GuessLetterView(APIView):
         # 9. Return updated game status
         serializer = GameStatusSerializer(game)
         return Response(serializer.data)
+
+
+# User's Games
+class UserGamesListView(generics.ListAPIView):
+    serializer_class = GameStatusSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        user = self.request.user
+        status = self.request.query_params.get('status')  # optional filter by status
+        queryset = Game.objects.filter(
+            models.Q(player1=user) | models.Q(player2=user)
+        )
+        if status in ['waiting', 'active', 'finished']:
+            queryset = queryset.filter(status=status)
+        return queryset.order_by('-created_at')
+    
