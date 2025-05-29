@@ -70,6 +70,8 @@ class GameStatusView(generics.RetrieveAPIView):
 
 # Guess View
 class GuessLetterView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
     def post(self, request, game_id):
         user = request.user
         letter = request.data.get('letter', '').lower()
@@ -120,6 +122,12 @@ class GuessLetterView(APIView):
         if all(char.lower() in guessed_letters for char in game.word.lower()):
             game.status = 'finished'
             game.winner = user
+
+        # Award XP to winner based on difficulty
+        xp_rewards = {'easy': 30, 'medium': 50, 'hard': 100}
+        winner = user
+        winner.xp += xp_rewards.get(game.difficulty, 0)
+        winner.save()
 
         # TODO: Check for time expiration (if you implement timing)
 
