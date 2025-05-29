@@ -26,7 +26,7 @@ SECRET_KEY = 'django-insecure-!*_w3w&5yos8ed6l-w=jqund%bkenp24sn@&=d%)d8tk_v%gw3
 DEBUG = True
 
 ALLOWED_HOSTS = []
-
+AUTH_USER_MODEL = 'game.CustomUser'
 
 # Application definition
 
@@ -82,7 +82,6 @@ DATABASES = {
         'NAME': BASE_DIR / 'db.sqlite3',
     }
 }
-
 
 # Password validation
 # https://docs.djangoproject.com/en/5.2/ref/settings/#auth-password-validators

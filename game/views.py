@@ -7,8 +7,10 @@ from rest_framework import generics, permissions
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework import status, views
-from django.contrib.auth.models import User
+from django.contrib.auth import get_user_model
 from django.shortcuts import get_object_or_404
+
+User = get_user_model()
 
 
 class RegisterView(generics.CreateAPIView):
@@ -128,7 +130,7 @@ class GuessLetterView(APIView):
         return Response(serializer.data)
 
 
-# User's Games
+# User's Games History
 class UserGamesListView(generics.ListAPIView):
     serializer_class = GameStatusSerializer
     permission_classes = [permissions.IsAuthenticated]
@@ -142,4 +144,3 @@ class UserGamesListView(generics.ListAPIView):
         if status in ['waiting', 'active', 'finished']:
             queryset = queryset.filter(status=status)
         return queryset.order_by('-created_at')
-    
