@@ -69,6 +69,7 @@ class AvailableGameSerializer(serializers.ModelSerializer):
 class GameStatusSerializer(serializers.ModelSerializer):
     player1 = serializers.CharField(source='player1.username', read_only=True)
     player2 = serializers.CharField(source='player2.username', read_only=True)
+    winner = serializers.CharField(source='winner.username', read_only=True)
     current_turn = serializers.CharField(source='current_turn.username', read_only=True)
     word_progress = serializers.SerializerMethodField()
     remaining_time = serializers.SerializerMethodField()
@@ -78,7 +79,7 @@ class GameStatusSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'player1', 'player2', 'difficulty', 'status',
             'score_player1', 'score_player2', 'current_turn',
-            'word_progress', 'remaining_time', 'created_at'
+            'word_progress', 'remaining_time', 'created_at', 'winner'
         ]
 
     def get_word_progress(self, obj):
