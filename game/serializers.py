@@ -24,7 +24,7 @@ class RegisterSerializer(serializers.ModelSerializer):
 class ProfileSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
-        fields = ('id', 'username', 'email')
+        fields = ('id', 'username', 'email', 'xp')
 
 
 # Game Serializer
@@ -42,7 +42,7 @@ class GameCreateSerializer(serializers.ModelSerializer):
         game = Game.objects.create(
             player1=user,
             word=word,
-            difficulty=difficulty,
+            difficulty=v,
             current_turn=user  # Start With Player One
         )
         return game
@@ -70,7 +70,7 @@ class AvailableGameSerializer(serializers.ModelSerializer):
 class GameStatusSerializer(serializers.ModelSerializer):
     player1 = serializers.CharField(source='player1.username', read_only=True)
     player2 = serializers.CharField(source='player2.username', read_only=True)
-    winner = serializers.CharField(source='winner.username', read_only=True)
+    winner = serializers.SerializerMethodField()
     current_turn = serializers.CharField(source='current_turn.username', read_only=True)
     word_progress = serializers.SerializerMethodField()
     remaining_time = serializers.SerializerMethodField()
@@ -82,6 +82,11 @@ class GameStatusSerializer(serializers.ModelSerializer):
             'score_player1', 'score_player2', 'current_turn',
             'word_progress', 'remaining_time', 'created_at', 'winner'
         ]
+
+    def get_winner(self, obj):
+        if obj.winner is None:
+            return "Draw"
+        return obj.winner.username
 
     def get_word_progress(self, obj):
         # Collect all guessed letters for this game

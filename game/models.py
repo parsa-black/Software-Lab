@@ -32,6 +32,7 @@ class Game(models.Model):
 
     current_turn = models.ForeignKey(settings.AUTH_USER_MODEL, related_name='games_current_turn', on_delete=models.SET_NULL, null=True, blank=True)
     winner = models.ForeignKey(settings.AUTH_USER_MODEL, related_name='games_won', on_delete=models.SET_NULL, null=True, blank=True)
+    loser = models.ForeignKey(settings.AUTH_USER_MODEL, related_name='games_lose', on_delete=models.SET_NULL, null=True, blank=True)
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

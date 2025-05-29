@@ -121,13 +121,35 @@ class GuessLetterView(APIView):
         guessed_letters = game.guesses.filter(is_correct=True).values_list('letter', flat=True)
         if all(char.lower() in guessed_letters for char in game.word.lower()):
             game.status = 'finished'
-            game.winner = user
+            if game.score_player1 > game.score_player2:
+                game.winner = game.player1
+                game.loser = game.player2
+            elif game.score_player2 > game.score_player1:
+                game.winner = game.player2
+                game.loser = game.player1
+            else:
+                game.winner = None  # Draw
+                game.loser = None
 
         # Award XP to winner based on difficulty
-        xp_rewards = {'easy': 30, 'medium': 50, 'hard': 100}
-        winner = user
-        winner.xp += xp_rewards.get(game.difficulty, 0)
-        winner.save()
+        if game.winner:
+            if game.difficulty == 'easy':
+                game.winner.xp += 30
+            elif game.difficulty == 'medium':
+                game.winner.xp += 50
+            elif game.difficulty == 'hard':
+                game.winner.xp += 100
+            game.winner.save()
+
+        # Award XP to loser based on difficulty
+        if game.loser:
+            if game.difficulty == 'easy':
+                game.loser.xp += 10
+            elif game.difficulty == 'medium':
+                game.loser.xp += 16
+            elif game.difficulty == 'hard':
+                game.loser.xp += 33
+            game.loser.save()
 
         # TODO: Check for time expiration (if you implement timing)
 
@@ -145,10 +167,17 @@ class UserGamesListView(generics.ListAPIView):
 
     def get_queryset(self):
         user = self.request.user
-        status = self.request.query_params.get('status')  # optional filter by status
+        status_param = self.request.query_params.get('status')  # optional filter by status
         queryset = Game.objects.filter(
             models.Q(player1=user) | models.Q(player2=user)
         )
-        if status in ['waiting', 'active', 'finished']:
-            queryset = queryset.filter(status=status)
+        if status_param in ['waiting', 'active', 'finished']:
+            queryset = queryset.filter(status=status_param)
         return queryset.order_by('-created_at')
+
+    def list(self, request, *args, **kwargs):
+        queryset = self.get_queryset()
+        if not queryset.exists():
+            return Response({"message": "No Game History"}, status=status.HTTP_200_OK)
+        serializer = self.get_serializer(queryset, many=True)
+        return Response(serializer.data)
