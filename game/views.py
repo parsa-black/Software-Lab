@@ -1,8 +1,11 @@
 # game/views.py
 from .models import Game
-from rest_framework import generics, permissions
-from django.contrib.auth.models import User
 from .serializers import RegisterSerializer, ProfileSerializer, GameCreateSerializer, AvailableGameSerializer
+from rest_framework import generics, permissions
+from rest_framework.response import Response
+from rest_framework import status, views
+from django.contrib.auth.models import User
+from django.shortcuts import get_object_or_404
 
 
 class RegisterView(generics.CreateAPIView):
@@ -18,14 +21,36 @@ class ProfileView(generics.RetrieveAPIView):
         return self.request.user
 
 
+# Create Game
 class GameCreateView(generics.CreateAPIView):
     serializer_class = GameCreateSerializer
     permission_classes = [permissions.IsAuthenticated]
 
 
+# Available Game
 class AvailableGamesView(generics.ListAPIView):
     serializer_class = AvailableGameSerializer
     permission_classes = [permissions.IsAuthenticated]
 
     def get_queryset(self):
         return Game.objects.filter(player2__isnull=True, status='waiting')
+
+
+# Game Join
+class JoinGameView(views.APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request, pk):
+        game = get_object_or_404(Game, pk=pk)
+
+        if game.player2 is not None:
+            return Response({'detail': 'Game Has Player Two.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        if game.player1 == request.user:
+            return Response({'detail': 'You Are Player One.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        game.player2 = request.user
+        game.status = 'in_progress'
+        game.save()
+
+        return Response({'detail': 'Join Successful.'}, status=status.HTTP_200_OK)
