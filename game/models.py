@@ -1,6 +1,8 @@
 from django.db import models
 from django.contrib.auth.models import AbstractUser
 from django.conf import settings
+from django.utils import timezone
+from datetime import timedelta
 
 
 class CustomUser(AbstractUser):
@@ -36,6 +38,8 @@ class Game(models.Model):
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+
+    game_end_time = models.DateTimeField(null=True, blank=True)
 
     def __str__(self):
         return f"Game #{self.id} - {self.status}"

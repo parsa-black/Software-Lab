@@ -2,6 +2,8 @@
 from .models import Game, Guess
 from django.contrib.auth import get_user_model
 from rest_framework import serializers
+from django.utils import timezone
+
 User = get_user_model()
 
 
@@ -95,5 +97,15 @@ class GameStatusSerializer(serializers.ModelSerializer):
         return ' '.join([letter if letter.lower() in guessed_letters else '_' for letter in obj.word])
 
     def get_remaining_time(self, obj):
-        # Optional: Implement logic for countdown timer per difficulty if needed
-        return None
+        if obj.game_end_time:
+            remaining = obj.game_end_time - timezone.now()
+            if remaining.total_seconds() > 0:
+                return int(remaining.total_seconds())
+        return 0
+
+
+# Leader Board
+class LeaderboardSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = User
+        fields = ['username', 'xp']

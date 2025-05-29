@@ -2,15 +2,52 @@
 from django.db import models
 from .models import Game, Guess
 from .serializers import (RegisterSerializer, ProfileSerializer, GameCreateSerializer, AvailableGameSerializer,
-                          GameStatusSerializer)
+                          GameStatusSerializer, LeaderboardSerializer)
 from rest_framework import generics, permissions
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework import status, views
 from django.contrib.auth import get_user_model
 from django.shortcuts import get_object_or_404
+from datetime import timedelta
+from django.utils import timezone
 
 User = get_user_model()
+
+
+# Game Timer
+def set_game_end_time(game):
+    if game.difficulty == 'easy':
+        duration = timedelta(minutes=10)
+    elif game.difficulty == 'medium':
+        duration = timedelta(minutes=7)
+    elif game.difficulty == 'hard':
+        duration = timedelta(minutes=5)
+    else:
+        duration = timedelta(minutes=10)
+
+    game.game_end_time = timezone.now() + duration
+
+
+# Player XP Award
+def award_xp(game, winner, loser):
+    if winner:
+        if game.difficulty == 'easy':
+            winner.xp += 30
+        elif game.difficulty == 'medium':
+            winner.xp += 50
+        elif game.difficulty == 'hard':
+            winner.xp += 100
+        winner.save()
+
+    if loser:
+        if game.difficulty == 'easy':
+            loser.xp += 10
+        elif game.difficulty == 'medium':
+            loser.xp += 16
+        elif game.difficulty == 'hard':
+            loser.xp += 33
+        loser.save()
 
 
 class RegisterView(generics.CreateAPIView):
@@ -56,6 +93,7 @@ class JoinGameView(views.APIView):
 
         game.player2 = request.user
         game.status = 'active'
+        set_game_end_time(game)
         game.save()
 
         return Response({'detail': 'Join Successful.'}, status=status.HTTP_200_OK)
@@ -76,6 +114,22 @@ class GuessLetterView(APIView):
         user = request.user
         letter = request.data.get('letter', '').lower()
         game = get_object_or_404(Game, pk=game_id)
+
+        if game.game_end_time and timezone.now() > game.game_end_time:
+            if game.score_player1 > game.score_player2:
+                game.winner = game.player1
+                game.loser = game.player2
+            elif game.score_player2 > game.score_player1:
+                game.winner = game.player2
+                game.loser = game.player1
+            else:
+                game.winner = None
+                game.loser = None
+
+            game.status = 'finished'
+            award_xp(game, game.winner, game.loser)
+            game.save()
+            return Response({"error": "Time is over. Game finished."}, status=status.HTTP_400_BAD_REQUEST)
 
         # First Game Check
         if game.status == 'finished':
@@ -131,28 +185,7 @@ class GuessLetterView(APIView):
                 game.winner = None  # Draw
                 game.loser = None
 
-        # Award XP to winner based on difficulty
-        if game.winner:
-            if game.difficulty == 'easy':
-                game.winner.xp += 30
-            elif game.difficulty == 'medium':
-                game.winner.xp += 50
-            elif game.difficulty == 'hard':
-                game.winner.xp += 100
-            game.winner.save()
-
-        # Award XP to loser based on difficulty
-        if game.loser:
-            if game.difficulty == 'easy':
-                game.loser.xp += 10
-            elif game.difficulty == 'medium':
-                game.loser.xp += 16
-            elif game.difficulty == 'hard':
-                game.loser.xp += 33
-            game.loser.save()
-
-        # TODO: Check for time expiration (if you implement timing)
-
+        award_xp(game, game.winner, game.loser)
         game.save()
 
         # 9. Return updated game status
@@ -181,3 +214,10 @@ class UserGamesListView(generics.ListAPIView):
             return Response({"message": "No Game History"}, status=status.HTTP_200_OK)
         serializer = self.get_serializer(queryset, many=True)
         return Response(serializer.data)
+
+
+# Leader Board
+class LeaderboardView(generics.ListAPIView):
+    queryset = User.objects.order_by('-xp')[:10]
+    serializer_class = LeaderboardSerializer
+    permission_classes = []
