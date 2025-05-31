@@ -52,7 +52,7 @@ class GameCreateSerializer(serializers.ModelSerializer):
     def _get_random_word(self, difficulty):
         # Test Word For Now
         word_pool = {
-            'easy': ['book', 'tree', 'lamp'],
+            'easy': ['book', 'tree'],
             'medium': ['planet', 'banana', 'laptop'],
             'hard': ['electricity', 'vocabulary', 'microphone']
         }
@@ -91,10 +91,15 @@ class GameStatusSerializer(serializers.ModelSerializer):
         return obj.winner.username
 
     def get_word_progress(self, obj):
-        # Collect all guessed letters for this game
-        guessed_letters = obj.guesses.values_list('letter', flat=True)
-        # Replace un guessed letters with underscores
-        return ' '.join([letter if letter.lower() in guessed_letters else '_' for letter in obj.word])
+        correct_guesses = obj.guesses.filter(is_correct=True)
+        revealed_positions = {
+            guess.position: guess.letter.lower()
+            for guess in correct_guesses
+        }
+        display = [
+            revealed_positions.get(i, '_') for i in range(len(obj.word))
+        ]
+        return ' '.join(display)
 
     def get_remaining_time(self, obj):
         if obj.game_end_time:

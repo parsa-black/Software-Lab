@@ -123,58 +123,64 @@ class GuessLetterView(APIView):
     def post(self, request, game_id):
         user = request.user
         letter = request.data.get('letter', '').lower()
+        position = request.data.get('position')
+
         game = get_object_or_404(Game, pk=game_id)
+        word = game.word.lower()
 
-        # Prevent non-players from guessing
-        if user != game.player1 and user != game.player2:
-            raise PermissionDenied("You are not a player in this game.")
-
-        # Prevent guessing if the game hasn't started yet
-        if game.status != 'active':
-            return Response({"error": "The game has not started yet."}, status=status.HTTP_400_BAD_REQUEST)
-
-        # Check if game time is over
+        # 1. Check if game time is over
         if game.game_end_time and timezone.now() > game.game_end_time:
-            if game.score_player1 > game.score_player2:
-                game.winner = game.player1
-                game.loser = game.player2
-            elif game.score_player2 > game.score_player1:
-                game.winner = game.player2
-                game.loser = game.player1
-            else:
-                game.winner = None
-                game.loser = None
-
             game.status = 'finished'
+            if game.score_player1 > game.score_player2:
+                game.winner, game.loser = game.player1, game.player2
+            elif game.score_player2 > game.score_player1:
+                game.winner, game.loser = game.player2, game.player1
+            else:
+                game.winner = game.loser = None
             award_xp(game, game.winner, game.loser)
             game.save()
             return Response({"error": "Time is over. Game finished."}, status=status.HTTP_400_BAD_REQUEST)
 
-        # First Game Check
+        # 2. Game must be active
+        if user != game.player1 and user != game.player2:
+            raise PermissionDenied("You are not a player in this game.")
+
         if game.status == 'finished':
             return Response({"error": "Game already finished"}, status=status.HTTP_400_BAD_REQUEST)
 
-        # 1. Validate letter input
-        if not letter or len(letter) != 1 or not letter.isalpha():
-            return Response({"error": "Invalid letter"}, status=status.HTTP_400_BAD_REQUEST)
+        if game.status != 'active':
+            return Response({"error": "The game has not started yet."}, status=status.HTTP_400_BAD_REQUEST)
 
-        # 2. Check if it's user's turn
         if game.current_turn != user:
             return Response({"error": "Not your turn"}, status=status.HTTP_403_FORBIDDEN)
 
-        # 3. Check if letter already guessed
-        if game.guesses.filter(letter__iexact=letter).exists():
-            return Response({"error": "Letter already guessed"}, status=status.HTTP_400_BAD_REQUEST)
+        if not letter or len(letter) != 1 or not letter.isalpha():
+            return Response({"error": "Invalid letter"}, status=status.HTTP_400_BAD_REQUEST)
 
-        # 4. Check if guess is correct
-        is_correct = letter in game.word.lower()
+        try:
+            position = int(position)
+        except (TypeError, ValueError):
+            return Response({"error": "Invalid position"}, status=status.HTTP_400_BAD_REQUEST)
+
+        if position < 0 or position >= len(word):
+            return Response({"error": "Position out of range"}, status=status.HTTP_400_BAD_REQUEST)
+
+        # 3. Only block if position was already correctly guessed
+        if game.guesses.filter(position=position, is_correct=True).exists():
+            return Response({"error": f"Position {position} already correctly guessed"}, status=status.HTTP_400_BAD_REQUEST)
+        if game.guesses.filter(position=position, letter__iexact=letter).exists():
+            return Response({"error": f"You already guessed letter '{letter}' at position {position}."},
+                            status=status.HTTP_400_BAD_REQUEST)
+
+        # 4. Check correctness only at that position
+        is_correct = word[position] == letter
 
         # 5. Update score
         if is_correct:
             if user == game.player1:
-                game.score_player1 += 50
+                game.score_player1 += 100
             else:
-                game.score_player2 += 50
+                game.score_player2 += 100
         else:
             if user == game.player1:
                 game.score_player1 -= 10
@@ -182,17 +188,14 @@ class GuessLetterView(APIView):
                 game.score_player2 -= 10
 
         # 6. Save guess
-        Guess.objects.create(game=game, player=user, letter=letter, is_correct=is_correct)
+        Guess.objects.create(game=game, player=user, letter=letter, position=position, is_correct=is_correct)
 
         # 7. Switch turn
-        if game.current_turn == game.player1:
-            game.current_turn = game.player2
-        else:
-            game.current_turn = game.player1
+        game.current_turn = game.player2 if user == game.player1 else game.player1
 
-        # 8. Check if game finished
-        guessed_letters = game.guesses.filter(is_correct=True).values_list('letter', flat=True)
-        if all(char.lower() in guessed_letters for char in game.word.lower()):
+        # 8. Check if all positions correctly guessed
+        correct_positions = set(game.guesses.filter(is_correct=True).values_list('position', flat=True))
+        if correct_positions == set(range(len(word))):
             game.status = 'finished'
             if game.score_player1 > game.score_player2:
                 game.winner = game.player1
@@ -201,13 +204,11 @@ class GuessLetterView(APIView):
                 game.winner = game.player2
                 game.loser = game.player1
             else:
-                game.winner = None  # Draw
-                game.loser = None
+                game.winner = game.loser = None
+            award_xp(game, game.winner, game.loser)
 
-        award_xp(game, game.winner, game.loser)
         game.save()
 
-        # 9. Return updated game status
         serializer = GameStatusSerializer(game)
         return Response(serializer.data)
 
