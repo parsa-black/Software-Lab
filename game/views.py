@@ -1,5 +1,7 @@
 # game/views.py
 from django.db import models
+from rest_framework.exceptions import PermissionDenied
+
 from .models import Game, Guess
 from .serializers import (RegisterSerializer, ProfileSerializer, GameCreateSerializer, AvailableGameSerializer,
                           GameStatusSerializer, LeaderboardSerializer)
@@ -101,9 +103,17 @@ class JoinGameView(views.APIView):
 
 # Game Status
 class GameStatusView(generics.RetrieveAPIView):
-    queryset = Game.objects.all()
-    serializer_class = GameStatusSerializer
     permission_classes = [permissions.IsAuthenticated]
+    serializer_class = GameStatusSerializer
+    queryset = Game.objects.all()
+
+    def get_object(self):
+        game = super().get_object()
+
+        if self.request.user != game.player1 and self.request.user != game.player2:
+            raise PermissionDenied("You are not a player in this game.")
+
+        return game
 
 
 # Guess View
@@ -115,6 +125,15 @@ class GuessLetterView(APIView):
         letter = request.data.get('letter', '').lower()
         game = get_object_or_404(Game, pk=game_id)
 
+        # Prevent non-players from guessing
+        if user != game.player1 and user != game.player2:
+            raise PermissionDenied("You are not a player in this game.")
+
+        # Prevent guessing if the game hasn't started yet
+        if game.status != 'active':
+            return Response({"error": "The game has not started yet."}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Check if game time is over
         if game.game_end_time and timezone.now() > game.game_end_time:
             if game.score_player1 > game.score_player2:
                 game.winner = game.player1
@@ -153,9 +172,9 @@ class GuessLetterView(APIView):
         # 5. Update score
         if is_correct:
             if user == game.player1:
-                game.score_player1 += 70
+                game.score_player1 += 50
             else:
-                game.score_player2 += 70
+                game.score_player2 += 50
         else:
             if user == game.player1:
                 game.score_player1 -= 10
