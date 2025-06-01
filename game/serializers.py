@@ -1,5 +1,5 @@
 # game/serializers.py
-from .models import Game, WordBank
+from .models import Game, WordBank, GameHintUsage
 from django.contrib.auth import get_user_model
 from rest_framework import serializers
 from django.utils import timezone
@@ -111,3 +111,12 @@ class LeaderboardSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
         fields = ['username', 'xp']
+
+
+class GameHintUsageSerializer(serializers.ModelSerializer):
+    player = serializers.CharField(source='player.username', read_only=True)
+    game = serializers.PrimaryKeyRelatedField(read_only=True)
+
+    class Meta:
+        model = GameHintUsage
+        fields = ['id', 'game', 'player', 'hint_type', 'used_at', 'extra_data']

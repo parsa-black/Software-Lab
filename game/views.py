@@ -1,8 +1,10 @@
 # game/views.py
+import random
+
 from django.db import models
 from rest_framework.exceptions import PermissionDenied
 
-from .models import Game, Guess
+from .models import Game, Guess, GameHintUsage
 from .serializers import (RegisterSerializer, ProfileSerializer, GameCreateSerializer, AvailableGameSerializer,
                           GameStatusSerializer, LeaderboardSerializer)
 from rest_framework import generics, permissions
@@ -180,9 +182,9 @@ class GuessLetterView(APIView):
         # 5. Update score
         if is_correct:
             if user == game.player1:
-                game.score_player1 += 100
+                game.score_player1 += 80
             else:
-                game.score_player2 += 100
+                game.score_player2 += 80
         else:
             if user == game.player1:
                 game.score_player1 -= 10
@@ -193,20 +195,49 @@ class GuessLetterView(APIView):
         Guess.objects.create(game=game, player=user, letter=letter, position=position, is_correct=is_correct)
 
         # 7. Switch turn
-        game.current_turn = game.player2 if user == game.player1 else game.player1
+        if user == game.player1:
+            if game.double_guess_player1:
+                game.double_guess_count_player1 += 1
+                if game.double_guess_count_player1 >= 2:
+                    game.double_guess_player1 = False
+                    game.double_guess_count_player1 = 0
+                    game.current_turn = game.player2
+                else:
+                    pass
+            else:
+                game.current_turn = game.player2
+                game.double_guess_count_player1 = 0
+
+        elif user == game.player2:
+            if game.double_guess_player2:
+                game.double_guess_count_player2 += 1
+                if game.double_guess_count_player2 >= 2:
+                    game.double_guess_player2 = False
+                    game.double_guess_count_player2 = 0
+                    game.current_turn = game.player1
+                else:
+                    pass
+            else:
+                game.current_turn = game.player1
+                game.double_guess_count_player2 = 0
 
         # 8. Check if all positions correctly guessed
         correct_positions = set(game.guesses.filter(is_correct=True).values_list('position', flat=True))
         if correct_positions == set(range(len(word))):
             game.status = 'finished'
-            if game.score_player1 > game.score_player2:
+
+            player1_correct_count = game.guesses.filter(player=game.player1, is_correct=True).count()
+            player2_correct_count = game.guesses.filter(player=game.player2, is_correct=True).count()
+
+            if player1_correct_count > player2_correct_count:
                 game.winner = game.player1
                 game.loser = game.player2
-            elif game.score_player2 > game.score_player1:
+            elif player2_correct_count > player1_correct_count:
                 game.winner = game.player2
                 game.loser = game.player1
             else:
                 game.winner = game.loser = None
+
             award_xp(game, game.winner, game.loser)
 
         game.save()
@@ -245,3 +276,128 @@ class LeaderboardView(generics.ListAPIView):
 
     def get_queryset(self):
         return User.objects.filter(is_staff=False, is_superuser=False).order_by('-xp')[:10]
+
+
+class RevealRandomLetterHintView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+
+    def post(self, request, game_id):
+        game = get_object_or_404(Game, pk=game_id)
+        user = request.user
+        word = game.word.lower()
+
+        if game.status != 'active':
+            return Response({"error": "Game is not active."}, status=400)
+
+        if user != game.player1 and user != game.player2:
+            raise PermissionDenied("You are not a player in this game.")
+
+        if game.current_turn != user:
+            return Response({"error": "Not your turn."}, status=403)
+
+        cost = 160
+        if (user == game.player1 and game.score_player1 < cost) or \
+           (user == game.player2 and game.score_player2 < cost):
+            return Response({"error": "Not enough score to use this hint."}, status=400)
+
+        guessed_positions = set(game.guesses.filter(is_correct=True).values_list('position', flat=True))
+        available_positions = [i for i in range(len(word)) if i not in guessed_positions]
+
+        if not available_positions:
+            return Response({"error": "All letters already guessed."}, status=400)
+
+        position = random.choice(available_positions)
+        letter = word[position]
+
+        Guess.objects.create(game=game, player=user, letter=letter, position=position, is_correct=True)
+
+        if user == game.player1:
+            game.score_player1 -= cost
+            player1_correct_count = game.guesses.filter(player=game.player1, is_correct=True).count()
+        else:
+            game.score_player2 -= cost
+            player2_correct_count = game.guesses.filter(player=game.player2, is_correct=True).count()
+
+        game.current_turn = game.player2 if user == game.player1 else game.player1
+        GameHintUsage.objects.create(game=game, player=user, hint_type='reveal_letter', extra_data=str(position))
+        game.save()
+        serializer = GameStatusSerializer(game)
+        return Response(serializer.data)
+
+
+class DoubleGuessHintView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request, game_id):
+        game = get_object_or_404(Game, pk=game_id)
+        user = request.user
+        cost = 100
+
+        if user != game.player1 and user != game.player2:
+            raise PermissionDenied("You are not a player in this game.")
+
+        if game.status != 'active':
+            return Response({"error": "Game is not active."}, status=400)
+
+        if game.current_turn != user:
+            return Response({"error": "Not your turn."}, status=403)
+
+        if user == game.player1 and game.score_player1 < cost:
+            return Response({"error": "Not enough score to use this hint."}, status=400)
+        elif user == game.player2 and game.score_player2 < cost:
+            return Response({"error": "Not enough score to use this hint."}, status=400)
+
+        request.session['double_guess_active_for'] = game.id
+
+        if user == game.player1:
+            game.score_player1 -= cost
+            game.double_guess_player1 = True
+        else:
+            game.score_player2 -= cost
+            game.double_guess_player2 = True
+
+        GameHintUsage.objects.create(game=game, player=user, hint_type='double_guess')
+        game.save()
+        return Response({"message": "You can now guess twice in this turn."})
+
+
+class LetterCountHintView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request, game_id):
+        game = get_object_or_404(Game, pk=game_id)
+        user = request.user
+        letter = request.data.get('letter', '').strip().lower()
+        word = game.word.lower()
+
+        cost = 60
+
+        if game.status != 'active':
+            return Response({"error": "Game is not active."}, status=400)
+
+        if not letter or len(letter) != 1 or not re.match(r'^[\u0600-\u06FF]$', letter):
+            return Response({"error": "Enter a valid Persian letter."}, status=400)
+
+        if (user == game.player1 and game.score_player1 < cost) or \
+           (user == game.player2 and game.score_player2 < cost):
+            return Response({"error": "Not enough score to use this hint."}, status=400)
+
+        count = word.count(letter)
+
+        if user == game.player1:
+            game.score_player1 -= cost
+        else:
+            game.score_player2 -= cost
+
+        # Log Hint Letter
+        GameHintUsage.objects.create(game=game, player=user, hint_type='letter_count', extra_data=letter)
+
+        game.save()
+        return Response({
+            "hint_type": "letter_count",
+            "letter": letter,
+            "count": count,
+            "score_spent": cost
+        })
+
