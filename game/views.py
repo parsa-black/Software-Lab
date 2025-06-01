@@ -13,6 +13,7 @@ from django.contrib.auth import get_user_model
 from django.shortcuts import get_object_or_404
 from datetime import timedelta
 from django.utils import timezone
+import re
 
 User = get_user_model()
 
@@ -154,8 +155,9 @@ class GuessLetterView(APIView):
         if game.current_turn != user:
             return Response({"error": "Not your turn"}, status=status.HTTP_403_FORBIDDEN)
 
-        if not letter or len(letter) != 1 or not letter.isalpha():
-            return Response({"error": "Invalid letter"}, status=status.HTTP_400_BAD_REQUEST)
+        if not letter or len(letter) != 1 or not re.match(r'^[\u0600-\u06FF]$', letter):
+            return Response({"error": "Invalid letter. Only Persian letters are allowed."},
+                            status=status.HTTP_400_BAD_REQUEST)
 
         try:
             position = int(position)
@@ -238,6 +240,8 @@ class UserGamesListView(generics.ListAPIView):
 
 # Leader Board
 class LeaderboardView(generics.ListAPIView):
-    queryset = User.objects.order_by('-xp')[:10]
+    permission_classes = [permissions.IsAuthenticated]
     serializer_class = LeaderboardSerializer
-    permission_classes = []
+
+    def get_queryset(self):
+        return User.objects.filter(is_staff=False, is_superuser=False).order_by('-xp')[:10]

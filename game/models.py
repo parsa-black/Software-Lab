@@ -51,6 +51,21 @@ class Guess(models.Model):
     letter = models.CharField(max_length=1)
     is_correct = models.BooleanField()
     timestamp = models.DateTimeField(auto_now_add=True)
+    position = models.PositiveIntegerField()
 
     def __str__(self):
         return f"{self.player.username} guessed '{self.letter}' ({'✔️' if self.is_correct else '❌'})"
+
+
+class WordBank(models.Model):
+    DIFFICULTY_CHOICES = (
+        ('easy', 'آسان'),
+        ('medium', 'متوسط'),
+        ('hard', 'سخت'),
+    )
+
+    word = models.CharField(max_length=100)
+    difficulty = models.CharField(max_length=10, choices=DIFFICULTY_CHOICES)
+
+    def __str__(self):
+        return f"{self.word} ({self.difficulty})"

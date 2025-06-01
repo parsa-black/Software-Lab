@@ -1,5 +1,5 @@
 # game/serializers.py
-from .models import Game, Guess
+from .models import Game, WordBank
 from django.contrib.auth import get_user_model
 from rest_framework import serializers
 from django.utils import timezone
@@ -50,14 +50,11 @@ class GameCreateSerializer(serializers.ModelSerializer):
         return game
 
     def _get_random_word(self, difficulty):
-        # Test Word For Now
-        word_pool = {
-            'easy': ['book', 'tree'],
-            'medium': ['planet', 'banana', 'laptop'],
-            'hard': ['electricity', 'vocabulary', 'microphone']
-        }
+        words = WordBank.objects.filter(difficulty=difficulty)
+        if not words.exists():
+            raise serializers.ValidationError(f"No words found for difficulty: {difficulty}")
         from random import choice
-        return choice(word_pool[difficulty])
+        return choice(words).word
 
 
 class AvailableGameSerializer(serializers.ModelSerializer):
